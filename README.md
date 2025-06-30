@@ -18,6 +18,7 @@
     pip install -r requirements.txt
 
 4. 🔽 Modellarni kerakli papklarga yuklab olish:
+    
     Watermark Detect funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
     https://disk.yandex.com/d/8ylxsLs1uhj-Xg
 
