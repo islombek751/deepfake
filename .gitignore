@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Env
+.env
+*.env
+*.env.*
+
+# Virtual env
+.venv/
+venv/
+ENV/
+static/
+# IDEs
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Alembic
+alembic/versions/*.pyc
+alembic/versions/__pycache__/
+
+# Pytest cache
+.pytest_cache/
+.cache/
+
+# Logs
+*.log
+*.sqlite3
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# MyPy & Pyright
+.mypy_cache/
+.pyright/
+dmypy.json
+dmypy.log
+
+# Poetry (optional)
+poetry.lock
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# .ipython
+.ipython/
+
+# logs
+logs/
+
+# images
+
+uploaded_images/*
+!uploaded_images/.gitkeep
+
+# models
+
+*.pth
