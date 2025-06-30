@@ -4,8 +4,8 @@
 
 1. 🔽 Repository’ni klonlash:
    ```bash
-   git clone https://github.com/yourusername/your-fastapi-project.git
-   cd your-fastapi-project
+   git clone https://git.uzinfocom.uz/agrod/ministry-of-water-resources/media-checker/backend.git
+   cd backend
 
 2. 🔽 Virtual environment yaratish (ixtiyoriy, tavsiya qilinadi):
     ```bash
