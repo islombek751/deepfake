@@ -11,44 +11,47 @@
     ```bash
     python -m venv venv
     source venv/bin/activate    # Linux/Mac
-    .\venv\Scripts\activate  
+    .\venv\Scripts\activate  # windows
 
 3. 🔽 Kutubxonalarni o‘rnatish:
     ```bash
     pip install -r requirements.txt
 
-3. 🔽 Modellarni kerakli papklarga yuklab olish:
+4. 🔽 Modellarni kerakli papklarga yuklab olish:
     Watermark Detect funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
-
+    ```bash
     https://disk.yandex.com/d/8ylxsLs1uhj-Xg
 
-    Va src/watermark_detector/models/ papkasiga ko'chirib o'tkazing.
+Va src/watermark_detector/models/ papkasiga ko'chirib o'tkazing.
 
     ___________________________________________________________________________________
 
     Ai-generated Detector funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
-
+    ```bash
     https://disk.yandex.com/d/OlxjNLvxb01xpg
 
-    Va src/fake_detector/models/ papkasiga ko'chirib o'tkazing.
 
-🚀 Loyihani ishga tushirish
+Va src/fake_detector/models/ papkasiga ko'chirib o'tkazing.
+
+5. 🚀 Loyihani ishga tushirish
+    
     ```bash
     uvicorn main:app --reload
 
 
-📁 Loyiha tuzilmasi
-```bash
+6. 📁 Loyiha tuzilmasi
+    ```bash
     .
-    ├── main.py
     ├── requirements.txt
     ├── README.md
+    ├── uploaded_images
     └── src/
+        ├── main.py    ← bu yerda API endpointlar yozilgan
         ├── watermark_detector/
         │   └── models/  ← bu yerga Watermark modeli joylashtiriladi
         └── fake_detector/
             └── models/  ← bu yerga AI-generated modeli joylashtiriladi
 
 
-✨ Eslatma
+7. ✨ Eslatma
 Model fayllari .gitignore orqali git’da kuzatilmaydi. Ularni alohida yuklab olish majburiy.
