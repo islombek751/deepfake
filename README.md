@@ -20,6 +20,7 @@
 4. 🔽 Modellarni kerakli papklarga yuklab olish:
     
     Watermark Detect funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
+    
     https://disk.yandex.com/d/8ylxsLs1uhj-Xg
 
     Va src/watermark_detector/models/ papkasiga ko'chirib o'tkazing.
@@ -27,6 +28,7 @@
     ___________________________________________________________________________________
 
     Ai-generated Detector funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
+    
     https://disk.yandex.com/d/OlxjNLvxb01xpg
 
 
