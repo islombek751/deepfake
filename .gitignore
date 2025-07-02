@@ -64,6 +64,12 @@ logs/
 uploaded_images/*
 !uploaded_images/.gitkeep
 
+#videos
+
+uploaded_videos/*
+!uploaded_videos/.gitkeep
+
+
 # models
 
 *.pth
