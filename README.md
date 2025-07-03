@@ -34,11 +34,22 @@
 
     Va src/fake_detector/models/ papkasiga ko'chirib o'tkazing.
 
+    ____________________________________________________________________________________
+
+    DeepFake video detector funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
+
+    https://disk.yandex.com/d/8QB3RJjWzN4keQ
+
+    Va src/deepfake_video_detector/models/ papkasiga ko'chirib o'tkazing.
+
+
 5. 🚀 Loyihani ishga tushirish
     
     ```bash
     uvicorn main:app --reload
 
+
+    http://127.0.0.1:8000/docs
 
 6. 📁 Loyiha tuzilmasi
     ```bash
