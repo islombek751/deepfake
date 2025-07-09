@@ -59,6 +59,9 @@
     ├── uploaded_images
     └── src/
         ├── main.py    ← bu yerda API endpointlar yozilgan
+        ├── analyze_metadata/
+        ├── deepfake_video_detector/
+        │   └── models/  ← bu yerga Deepfake video modeli joylashtiriladi
         ├── watermark_detector/
         │   └── models/  ← bu yerga Watermark modeli joylashtiriladi
         └── fake_detector/
