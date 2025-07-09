@@ -7,11 +7,21 @@ import numpy as np
 from .models import model_selection
 from .transform import xception_default_data_transforms
 
-
+# Global dlib yuz aniqlovchi
 _face_detector = dlib.get_frontal_face_detector()
 _model = None
 
 def load_model_once(model_path, use_cuda=True):
+    """
+    Load the deepfake detection model once and cache it globally.
+
+    Parameters:
+        model_path (str): Path to the model .pth file.
+        use_cuda (bool): Whether to use CUDA (GPU) if available.
+
+    Returns:
+        torch.nn.Module: The loaded model in evaluation mode.
+    """
     global _model
     if _model is None:
         model = model_selection(modelname='xception', num_out_classes=2, dropout=0.5)
@@ -22,7 +32,21 @@ def load_model_once(model_path, use_cuda=True):
         _model = model
     return _model
 
+
 def get_boundingbox(face, width, height, scale=1.3, minsize=None):
+    """
+    Compute a square bounding box around the detected face with optional scaling.
+
+    Parameters:
+        face (dlib.rectangle): Face bounding box from dlib detector.
+        width (int): Width of the original frame.
+        height (int): Height of the original frame.
+        scale (float): Scaling factor for the bounding box size.
+        minsize (int or None): Minimum bounding box size.
+
+    Returns:
+        tuple: (x1, y1, size) — top-left coordinates and box size.
+    """
     x1, y1, x2, y2 = face.left(), face.top(), face.right(), face.bottom()
     size_bb = int(max(x2 - x1, y2 - y1) * scale)
     if minsize and size_bb < minsize:
@@ -36,6 +60,18 @@ def get_boundingbox(face, width, height, scale=1.3, minsize=None):
 
 
 def preprocess_image(image, cuda=True):
+    """
+    Preprocess an image for model inference.
+
+    Converts image to RGB, applies Xception transforms, and adds batch dimension.
+
+    Parameters:
+        image (np.ndarray): BGR image (OpenCV format).
+        cuda (bool): Whether to move tensor to GPU.
+
+    Returns:
+        torch.Tensor: Preprocessed image tensor.
+    """
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     preprocess = xception_default_data_transforms['test']
     preprocessed_image = preprocess(pil_image.fromarray(image)).unsqueeze(0)
@@ -43,16 +79,44 @@ def preprocess_image(image, cuda=True):
 
 
 def predict_with_model(image, model, cuda=True):
+    """
+    Predict whether an image is real or fake using the given model.
+
+    Parameters:
+        image (np.ndarray): Cropped face image.
+        model (torch.nn.Module): Loaded deepfake detection model.
+        cuda (bool): Whether to use GPU for inference.
+
+    Returns:
+        tuple:
+            - prediction (int): 0 for real, 1 for fake.
+            - confidence (float): Probability of being fake (0 to 1).
+    """
     input_tensor = preprocess_image(image, cuda)
     with torch.no_grad():
         output = model(input_tensor)
         output = nn.Softmax(dim=1)(output)
         prediction = torch.argmax(output, dim=1).item()
-        confidence = output[0][1].item()  # fake ehtimoli
+        confidence = output[0][1].item()  # Probability that it's fake
     return prediction, confidence
 
 
 def analyze_video(video_path: str, model_path="src/deepfake_video_detector/models/ffpp_c23.pth", use_cuda=True) -> str:
+    """
+    Analyze a video to detect if it's real or deepfake.
+
+    This function reads up to 50 frames from the video, detects a face in each frame,
+    crops and preprocesses the face, then uses a neural network to predict fake/real.
+    It averages the predictions to determine the final result.
+
+    Parameters:
+        video_path (str): Path to the input video file.
+        model_path (str): Path to the model weights (.pth file).
+        use_cuda (bool): Whether to use GPU for inference.
+
+    Returns:
+        str: "real", "fake", or "unknown" (if no faces found or no frames processed).
+    """
     model = load_model_once(model_path, use_cuda=use_cuda)
     cap = cv2.VideoCapture(video_path)
     frame_count = 0
@@ -65,18 +129,16 @@ def analyze_video(video_path: str, model_path="src/deepfake_video_detector/model
         frame_count += 1
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = _face_detector(gray, 1)
-        if not faces:
-            continue
-        face = faces[0]
-        x, y, size = get_boundingbox(face, frame.shape[1], frame.shape[0])
-        cropped_face = frame[y:y+size, x:x+size]
-        pred, conf = predict_with_model(cropped_face, model, cuda=use_cuda)
-        predictions.append(conf)
+        for face in faces:
+            x, y, size = get_boundingbox(face, frame.shape[1], frame.shape[0])
+            cropped_face = frame[y:y+size, x:x+size]
+
+            pred, conf = predict_with_model(cropped_face, model, cuda=use_cuda)
+            predictions.append(conf)
 
     cap.release()
 
     if not predictions:
         return "unknown"
-
     avg_score = np.mean(predictions)
     return "fake" if avg_score > 0.5 else "real"

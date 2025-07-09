@@ -1,17 +1,18 @@
 """
-Ported to pytorch thanks to [tstandley](https://github.com/tstandley/Xception-PyTorch)
+Ported to PyTorch from the Keras Xception implementation thanks to [tstandley](https://github.com/tstandley/Xception-PyTorch)
 
-This weights ported from the Keras implementation. Achieves the following performance on the validation set:
+Model Info:
+- Achieves ~78.89% top-1 and ~94.29% top-5 accuracy on ImageNet val set.
+- Input size must be (3 x 299 x 299)
+- Normalization: mean = [0.5, 0.5, 0.5], std = [0.5, 0.5, 0.5]
+- Validation pipeline: Resize to 333 → CenterCrop 299
 
-Loss:0.9173 Prec@1:78.892 Prec@5:94.292
-
-REMEMBER to set your image size to 3x299x299 for both test and validation
-
-normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                  std=[0.5, 0.5, 0.5])
-
-The resize parameter of the validation transform should be 333, and make sure to center crop at 299x299
+This implementation includes:
+- Xception model (with depthwise separable convolutions)
+- Optional pretrained weights (ImageNet)
+- A modified variant for 15-channel input (Xception_concat)
 """
+
 import math
 import torch
 import torch.nn as nn
@@ -19,6 +20,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 from torch.nn import init
 
+# Pretrained model settings for loading ImageNet weights
 pretrained_settings = {
     'xception': {
         'imagenet': {
@@ -29,54 +31,66 @@ pretrained_settings = {
             'mean': [0.5, 0.5, 0.5],
             'std': [0.5, 0.5, 0.5],
             'num_classes': 1000,
-            'scale': 0.8975 # The resize parameter of the validation transform should be 333, and make sure to center crop at 299x299
+            'scale': 0.8975
         }
     }
 }
 
 
 class SeparableConv2d(nn.Module):
-    def __init__(self,in_channels,out_channels,kernel_size=1,stride=1,padding=0,dilation=1,bias=False):
-        super(SeparableConv2d,self).__init__()
+    """
+    Depthwise separable convolution:
+    - First, depthwise convolution (groups=in_channels)
+    - Then, pointwise (1x1) convolution to combine channels
+    """
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding,
+                               dilation, groups=in_channels, bias=bias)
+        self.pointwise = nn.Conv2d(in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
 
-        self.conv1 = nn.Conv2d(in_channels,in_channels,kernel_size,stride,padding,dilation,groups=in_channels,bias=bias)
-        self.pointwise = nn.Conv2d(in_channels,out_channels,1,1,0,1,1,bias=bias)
-
-    def forward(self,x):
+    def forward(self, x):
         x = self.conv1(x)
         x = self.pointwise(x)
         return x
 
 
 class Block(nn.Module):
-    def __init__(self,in_filters,out_filters,reps,strides=1,start_with_relu=True,grow_first=True):
-        super(Block, self).__init__()
+    """
+    Xception residual block consisting of SeparableConv2d layers and optional skip connection.
 
-        if out_filters != in_filters or strides!=1:
-            self.skip = nn.Conv2d(in_filters,out_filters,1,stride=strides, bias=False)
-            self.skipbn = nn.BatchNorm2d(out_filters)
-        else:
-            self.skip=None
+    Args:
+        in_filters (int): Number of input channels.
+        out_filters (int): Number of output channels.
+        reps (int): Number of repeated layers.
+        strides (int): Stride for the block.
+        start_with_relu (bool): Whether to start the block with ReLU.
+        grow_first (bool): Whether to increase channel size at the beginning.
+    """
+    def __init__(self, in_filters, out_filters, reps, strides=1, start_with_relu=True, grow_first=True):
+        super().__init__()
+        self.skip = nn.Conv2d(in_filters, out_filters, 1, stride=strides, bias=False) if (out_filters != in_filters or strides != 1) else None
+        self.skipbn = nn.BatchNorm2d(out_filters) if self.skip else None
 
         self.relu = nn.ReLU(inplace=True)
-        rep=[]
+        rep = []
 
-        filters=in_filters
+        filters = in_filters
         if grow_first:
-            rep.append(self.relu)
-            rep.append(SeparableConv2d(in_filters,out_filters,3,stride=1,padding=1,bias=False))
-            rep.append(nn.BatchNorm2d(out_filters))
+            rep += [self.relu,
+                    SeparableConv2d(in_filters, out_filters, 3, 1, 1),
+                    nn.BatchNorm2d(out_filters)]
             filters = out_filters
 
-        for i in range(reps-1):
-            rep.append(self.relu)
-            rep.append(SeparableConv2d(filters,filters,3,stride=1,padding=1,bias=False))
-            rep.append(nn.BatchNorm2d(filters))
+        for _ in range(reps - 1):
+            rep += [self.relu,
+                    SeparableConv2d(filters, filters, 3, 1, 1),
+                    nn.BatchNorm2d(filters)]
 
         if not grow_first:
-            rep.append(self.relu)
-            rep.append(SeparableConv2d(in_filters,out_filters,3,stride=1,padding=1,bias=False))
-            rep.append(nn.BatchNorm2d(out_filters))
+            rep += [self.relu,
+                    SeparableConv2d(in_filters, out_filters, 3, 1, 1),
+                    nn.BatchNorm2d(out_filters)]
 
         if not start_with_relu:
             rep = rep[1:]
@@ -84,233 +98,60 @@ class Block(nn.Module):
             rep[0] = nn.ReLU(inplace=False)
 
         if strides != 1:
-            rep.append(nn.MaxPool2d(3,strides,1))
+            rep.append(nn.MaxPool2d(3, strides, 1))
+
         self.rep = nn.Sequential(*rep)
 
-    def forward(self,inp):
-        x = self.rep(inp)
-
-        if self.skip is not None:
-            skip = self.skip(inp)
-            skip = self.skipbn(skip)
-        else:
-            skip = inp
-
-        x+=skip
-        return x
+    def forward(self, x):
+        out = self.rep(x)
+        skip = self.skipbn(self.skip(x)) if self.skip else x
+        return out + skip
 
 
 class Xception(nn.Module):
     """
-    Xception optimized for the ImageNet dataset, as specified in
-    https://arxiv.org/pdf/1610.02357.pdf
+    Standard Xception model with ImageNet-style architecture.
+
+    Args:
+        num_classes (int): Number of output classes (default 1000 for ImageNet).
     """
     def __init__(self, num_classes=1000):
-        """ Constructor
-        Args:
-            num_classes: number of classes
-        """
-        super(Xception, self).__init__()
+        super().__init__()
         self.num_classes = num_classes
 
-        #self.conv1 = nn.Conv2d(15,32,3,2,0,bias=False)
-        self.conv1 = nn.Conv2d(3,32,3,2,0,bias=False)
+        self.conv1 = nn.Conv2d(3, 32, 3, 2, 0, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
         self.relu = nn.ReLU(inplace=True)
 
-        self.conv2 = nn.Conv2d(32,64,3,bias=False)
+        self.conv2 = nn.Conv2d(32, 64, 3, bias=False)
         self.bn2 = nn.BatchNorm2d(64)
-        #do relu here
 
-        self.block1=Block(64,128,2,2,start_with_relu=False,grow_first=True)
-        self.block2=Block(128,256,2,2,start_with_relu=True,grow_first=True)
-        self.block3=Block(256,728,2,2,start_with_relu=True,grow_first=True)
+        self.block1 = Block(64, 128, 2, 2, False, True)
+        self.block2 = Block(128, 256, 2, 2)
+        self.block3 = Block(256, 728, 2, 2)
 
-        self.block4=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block5=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block6=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block7=Block(728,728,3,1,start_with_relu=True,grow_first=True)
+        self.block4 = Block(728, 728, 3)
+        self.block5 = Block(728, 728, 3)
+        self.block6 = Block(728, 728, 3)
+        self.block7 = Block(728, 728, 3)
+        self.block8 = Block(728, 728, 3)
+        self.block9 = Block(728, 728, 3)
+        self.block10 = Block(728, 728, 3)
+        self.block11 = Block(728, 728, 3)
 
-        self.block8=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block9=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block10=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block11=Block(728,728,3,1,start_with_relu=True,grow_first=True)
+        self.block12 = Block(728, 1024, 2, 2, True, False)
 
-        self.block12=Block(728,1024,2,2,start_with_relu=True,grow_first=False)
-
-        self.conv3 = SeparableConv2d(1024,1536,3,1,1)
+        self.conv3 = SeparableConv2d(1024, 1536, 3, 1, 1)
         self.bn3 = nn.BatchNorm2d(1536)
 
-        #do relu here
-        self.conv4 = SeparableConv2d(1536,2048,3,1,1)
+        self.conv4 = SeparableConv2d(1536, 2048, 3, 1, 1)
         self.bn4 = nn.BatchNorm2d(2048)
 
         self.fc = nn.Linear(2048, num_classes)
 
-        # #------- init weights --------
-        # for m in self.modules():
-        #     if isinstance(m, nn.Conv2d):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
-        # #-----------------------------
-
     def features(self, input):
-        x = self.conv1(input) #(32, 299, 299)
-        x = self.bn1(x)
-        x = self.relu(x)
-
-        x = self.conv2(x) #(64, 299, 299)
-        x = self.bn2(x)
-        x = self.relu(x)
-
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        x = self.block5(x)
-        x = self.block6(x)
-        x = self.block7(x)
-        x = self.block8(x)
-        x = self.block9(x)
-        x = self.block10(x)
-        x = self.block11(x)
-        x = self.block12(x) #(1024, 299, 299)
-
-        x = self.conv3(x) #(1536, 299, 299)
-        x = self.bn3(x)
-        x = self.relu(x)
-
-        x = self.conv4(x) #(2048, 299, 299)
-        x = self.bn4(x)
-        return x
-
-    def logits(self, features):
-        x = self.relu(features)
-
-        x = F.adaptive_avg_pool2d(x, (1, 1)) 
-        x = x.view(x.size(0), -1)
-        x = self.last_linear(x)
-        return x
-
-    def forward(self, input):
-        x = self.features(input)
-        x = self.logits(x)
-        return x
-
-
-
-class Xception_concat(nn.Module):
-    """
-    Xception optimized for the ImageNet dataset, as specified in
-    https://arxiv.org/pdf/1610.02357.pdf
-    """
-    def __init__(self, num_classes=1000):
-        """ Constructor
-        Args:
-            num_classes: number of classes
-        """
-        super(Xception_concat, self).__init__()
-        self.num_classes = num_classes
-
-        self.conv1 = nn.Conv2d(15,32,3,2,0,bias=False)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.relu = nn.ReLU(inplace=True)
-
-        self.conv2 = nn.Conv2d(32,64,3,bias=False)
-        self.bn2 = nn.BatchNorm2d(64)
-        #do relu here
-
-        self.block1=Block(64,128,2,2,start_with_relu=False,grow_first=True)
-        self.block2=Block(128,256,2,2,start_with_relu=True,grow_first=True)
-        self.block3=Block(256,728,2,2,start_with_relu=True,grow_first=True)
-
-        self.block4=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block5=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block6=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block7=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-
-        self.block8=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block9=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block10=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-        self.block11=Block(728,728,3,1,start_with_relu=True,grow_first=True)
-
-        self.block12=Block(728,1024,2,2,start_with_relu=True,grow_first=False)
-
-        self.conv3 = SeparableConv2d(1024,1536,3,1,1)
-        self.bn3 = nn.BatchNorm2d(1536)
-
-        #do relu here
-        self.conv4 = SeparableConv2d(1536,2048,3,1,1)
-        self.bn4 = nn.BatchNorm2d(2048)
-
-        self.fc = nn.Linear(2048, num_classes)
-
-        # #------- init weights --------
-        # for m in self.modules():
-        #     if isinstance(m, nn.Conv2d):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
-        # #-----------------------------
-
-    def features(self, input):
-        x = self.conv1(input) #(32, 299, 299)
-        x = self.bn1(x)
-        x = self.relu(x)
-
-        x = self.conv2(x) #(64, 299, 299)
-        x = self.bn2(x)
-        x = self.relu(x)
-
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        x = self.block5(x)
-        x = self.block6(x)
-        x = self.block7(x)
-        x = self.block8(x)
-        x = self.block9(x)
-        x = self.block10(x)
-        x = self.block11(x)
-        x = self.block12(x) #(1024, 299, 299)
-
-        x = self.conv3(x) #(1536, 299, 299)
-        x = self.bn3(x)
-        x = self.relu(x)
-
-        x = self.conv4(x) #(2048, 299, 299)
-        x = self.bn4(x)
-        return x
-
-    def logits(self, features):
-        x = self.relu(features)
-
-        x = F.adaptive_avg_pool2d(x, (1, 1)) 
-        x = x.view(x.size(0), -1)
-        x = self.last_linear(x)
-        return x
-
-    def forward(self, input):
-        x = self.features(input)
-        x = self.logits(x)
-        return x
-
-'''
-    def features(self, input):
-        x = self.conv1(input)
-        x = self.bn1(x)
-        x = self.relu(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.relu(x)
-
+        x = self.relu(self.bn1(self.conv1(input)))
+        x = self.relu(self.bn2(self.conv2(x)))
         x = self.block1(x)
         x = self.block2(x)
         x = self.block3(x)
@@ -323,56 +164,121 @@ class Xception_concat(nn.Module):
         x = self.block10(x)
         x = self.block11(x)
         x = self.block12(x)
-
-        x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.relu(x)
-
-        conv4_x = self.conv4(x)
-        x = self.bn4(conv4_x)
-        return x, conv4_x
+        x = self.relu(self.bn3(self.conv3(x)))
+        x = self.bn4(self.conv4(x))
+        return x
 
     def logits(self, features):
         x = self.relu(features)
-
-        x = F.adaptive_avg_pool2d(x, (1, 1))
-        x = x.view(x.size(0), -1)
+        x = F.adaptive_avg_pool2d(x, (1, 1)).view(x.size(0), -1)
         x = self.last_linear(x)
         return x
 
     def forward(self, input):
-        #x = self.features(input)
-        x, conv4_x = self.features(input)
-        x = self.logits(x)
-        #x = self.logits(x)
-        return x, conv4_x
-        '''
+        return self.logits(self.features(input))
+
+
+class Xception_concat(nn.Module):
+    """
+    Xception model variant that accepts 15-channel input (for multiple frame or stream fusion).
+
+    Args:
+        num_classes (int): Number of output classes (default 1000).
+    """
+    def __init__(self, num_classes=1000):
+        super().__init__()
+        self.num_classes = num_classes
+
+        self.conv1 = nn.Conv2d(15, 32, 3, 2, 0, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.conv2 = nn.Conv2d(32, 64, 3, bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
+
+        self.block1 = Block(64, 128, 2, 2, False, True)
+        self.block2 = Block(128, 256, 2, 2)
+        self.block3 = Block(256, 728, 2, 2)
+
+        self.block4 = Block(728, 728, 3)
+        self.block5 = Block(728, 728, 3)
+        self.block6 = Block(728, 728, 3)
+        self.block7 = Block(728, 728, 3)
+        self.block8 = Block(728, 728, 3)
+        self.block9 = Block(728, 728, 3)
+        self.block10 = Block(728, 728, 3)
+        self.block11 = Block(728, 728, 3)
+
+        self.block12 = Block(728, 1024, 2, 2, True, False)
+
+        self.conv3 = SeparableConv2d(1024, 1536, 3, 1, 1)
+        self.bn3 = nn.BatchNorm2d(1536)
+
+        self.conv4 = SeparableConv2d(1536, 2048, 3, 1, 1)
+        self.bn4 = nn.BatchNorm2d(2048)
+
+        self.fc = nn.Linear(2048, num_classes)
+
+    def features(self, input):
+        x = self.relu(self.bn1(self.conv1(input)))
+        x = self.relu(self.bn2(self.conv2(x)))
+        for block in [self.block1, self.block2, self.block3, self.block4, self.block5,
+                      self.block6, self.block7, self.block8, self.block9, self.block10,
+                      self.block11, self.block12]:
+            x = block(x)
+        x = self.relu(self.bn3(self.conv3(x)))
+        x = self.bn4(self.conv4(x))
+        return x
+
+    def logits(self, features):
+        x = self.relu(features)
+        x = F.adaptive_avg_pool2d(x, (1, 1)).view(x.size(0), -1)
+        x = self.last_linear(x)
+        return x
+
+    def forward(self, input):
+        return self.logits(self.features(input))
 
 
 def xception(num_classes=1000, pretrained='imagenet'):
+    """
+    Creates Xception model. Optionally loads ImageNet pretrained weights.
+
+    Args:
+        num_classes (int): Number of output classes.
+        pretrained (str or bool): If 'imagenet', loads weights trained on ImageNet.
+
+    Returns:
+        Xception: Xception model instance.
+    """
     model = Xception(num_classes=num_classes)
     if pretrained:
         settings = pretrained_settings['xception'][pretrained]
         assert num_classes == settings['num_classes'], \
-            "num_classes should be {}, but is {}".format(settings['num_classes'], num_classes)
-
-        model = Xception(num_classes=num_classes)
+            f"num_classes should be {settings['num_classes']}, but is {num_classes}"
         model.load_state_dict(model_zoo.load_url(settings['url']))
-
         model.input_space = settings['input_space']
         model.input_size = settings['input_size']
         model.input_range = settings['input_range']
         model.mean = settings['mean']
         model.std = settings['std']
 
-    # TODO: ugly
     model.last_linear = model.fc
     del model.fc
     return model
 
+
 def xception_concat(num_classes=1000):
+    """
+    Creates Xception_concat model (15-channel input).
+
+    Args:
+        num_classes (int): Number of output classes.
+
+    Returns:
+        Xception_concat: model instance.
+    """
     model = Xception_concat(num_classes=num_classes)
-    # TODO: ugly
     model.last_linear = model.fc
     del model.fc
     return model

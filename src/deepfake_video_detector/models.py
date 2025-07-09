@@ -1,25 +1,31 @@
-
 import os
 import argparse
-
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .xception import xception, xception_concat
-import math
 import torchvision
 
 
 def return_pytorch04_xception(pretrained=False):
-    # Raises warning "src not broadcastable to dst" but thats fine
+    """
+    Returns the Xception model compatible with PyTorch 0.4+.
+
+    If `pretrained=True`, loads pre-trained weights and adjusts weight shapes 
+    where necessary for compatibility.
+
+    Parameters:
+        pretrained (bool): Whether to load pre-trained weights.
+
+    Returns:
+        nn.Module: Xception model (with or without pre-trained weights).
+    """
     model = xception(pretrained=False)
     if pretrained:
-        # Load model in torch 0.4+
         model.fc = model.last_linear
         del model.last_linear
-        state_dict = torch.load(
-            '/public/liuhonggu/.torch/models/xception-b5690688.pth')
+        state_dict = torch.load('/public/liuhonggu/.torch/models/xception-b5690688.pth')
         for name, weights in state_dict.items():
             if 'pointwise' in name:
                 state_dict[name] = weights.unsqueeze(-1).unsqueeze(-1)
@@ -31,15 +37,23 @@ def return_pytorch04_xception(pretrained=False):
 
 class TransferModel(nn.Module):
     """
-    Simple transfer learning model that takes an imagenet pretrained model with
-    a fc layer as base model and retrains a new fc layer for num_out_classes
+    A transfer learning wrapper for various base models.
+
+    This class wraps a base model (Xception, ResNet18, ResNet50, or custom Xception variant)
+    and replaces the final fully connected layer to adapt to binary classification (e.g., real/fake).
+
+    Args:
+        modelchoice (str): One of ['xception', 'xception_concat', 'resnet18', 'resnet50'].
+        num_out_classes (int): Number of output classes.
+        dropout (float): Dropout rate to apply before the final FC layer (default: 0.5).
     """
+
     def __init__(self, modelchoice, num_out_classes=2, dropout=0.5):
         super(TransferModel, self).__init__()
         self.modelchoice = modelchoice
+
         if modelchoice == 'xception':
             self.model = return_pytorch04_xception(pretrained=False)
-            # Replace fc
             num_ftrs = self.model.last_linear.in_features
             if not dropout:
                 self.model.last_linear = nn.Linear(num_ftrs, num_out_classes)
@@ -49,6 +63,7 @@ class TransferModel(nn.Module):
                     nn.Dropout(p=dropout),
                     nn.Linear(num_ftrs, num_out_classes)
                 )
+
         elif modelchoice == 'xception_concat':
             self.model = xception_concat()
             num_ftrs = self.model.last_linear.in_features
@@ -60,12 +75,13 @@ class TransferModel(nn.Module):
                     nn.Dropout(p=dropout),
                     nn.Linear(num_ftrs, num_out_classes)
                 )
-        elif modelchoice == 'resnet50' or modelchoice == 'resnet18':
+
+        elif modelchoice in ['resnet18', 'resnet50']:
             if modelchoice == 'resnet50':
                 self.model = torchvision.models.resnet50(pretrained=True)
-            if modelchoice == 'resnet18':
+            else:
                 self.model = torchvision.models.resnet18(pretrained=True)
-            # Replace fc
+
             num_ftrs = self.model.fc.in_features
             if not dropout:
                 self.model.fc = nn.Linear(num_ftrs, num_out_classes)
@@ -74,71 +90,86 @@ class TransferModel(nn.Module):
                     nn.Dropout(p=dropout),
                     nn.Linear(num_ftrs, num_out_classes)
                 )
+
         else:
-            raise Exception('Choose valid model, e.g. resnet50')
+            raise Exception('Choose a valid model: e.g., resnet50, xception')
 
     def set_trainable_up_to(self, boolean, layername="Conv2d_4a_3x3"):
         """
-        Freezes all layers below a specific layer and sets the following layers
-        to true if boolean else only the fully connected final layer
-        :param boolean:
-        :param layername: depends on network, for inception e.g. Conv2d_4a_3x3
-        :return:
+        Controls which layers are trainable for fine-tuning.
+
+        Parameters:
+            boolean (bool): If True, all layers after `layername` will be trainable.
+                            If False, only the final classification layer is trainable.
+            layername (str): Name of the layer after which training should begin.
+                             If None, all layers are made trainable.
+        
+        Raises:
+            Exception: If the given layer name is not found.
         """
-        # Stage-1: freeze all the layers
         if layername is None:
-            for i, param in self.model.named_parameters():
+            for _, param in self.model.named_parameters():
                 param.requires_grad = True
-                return
+            return
         else:
-            for i, param in self.model.named_parameters():
+            for _, param in self.model.named_parameters():
                 param.requires_grad = False
+
         if boolean:
-            # Make all layers following the layername layer trainable
             ct = []
             found = False
             for name, child in self.model.named_children():
                 if layername in ct:
                     found = True
-                    for params in child.parameters():
-                        params.requires_grad = True
+                    for param in child.parameters():
+                        param.requires_grad = True
                 ct.append(name)
             if not found:
-                raise Exception('Layer not found, cant finetune!'.format(
-                    layername))
+                raise Exception(f'Layer "{layername}" not found, can\'t fine-tune!')
         else:
             if self.modelchoice == 'xception':
-                # Make fc trainable
                 for param in self.model.last_linear.parameters():
                     param.requires_grad = True
-
             else:
-                # Make fc trainable
                 for param in self.model.fc.parameters():
                     param.requires_grad = True
 
     def forward(self, x):
-        x = self.model(x)
-        return x
+        """
+        Forward pass of the model.
+
+        Parameters:
+            x (Tensor): Input image batch.
+
+        Returns:
+            Tensor: Raw output (logits) from the final layer.
+        """
+        return self.model(x)
 
 
-def model_selection(modelname, num_out_classes,
-                    dropout=None):
+def model_selection(modelname, num_out_classes, dropout=None):
     """
-    :param modelname:
-    :return: model, image size, pretraining<yes/no>, input_list
+    Factory method to create the selected model type.
+
+    Parameters:
+        modelname (str): One of ['xception', 'xception_concat', 'resnet18'].
+        num_out_classes (int): Number of output classes (e.g. 2 for real/fake).
+        dropout (float): Dropout rate (optional).
+
+    Returns:
+        nn.Module: Initialized TransferModel.
+
+    Raises:
+        NotImplementedError: If unknown model name is given.
     """
     if modelname == 'xception':
-        return TransferModel(modelchoice='xception',
-                             num_out_classes=num_out_classes)
-    #    , 299, \True, ['image'], None
-    elif modelname == 'resnet18':
-        return TransferModel(modelchoice='resnet18', dropout=dropout,
-                             num_out_classes=num_out_classes)
-    #    , \224, True, ['image'], None
-    elif modelname == 'xception_concat':
-        return TransferModel(modelchoice='xception_concat',
-                             num_out_classes=num_out_classes)
-    else:
-        raise NotImplementedError(modelname)
+        return TransferModel(modelchoice='xception', num_out_classes=num_out_classes)
 
+    elif modelname == 'resnet18':
+        return TransferModel(modelchoice='resnet18', dropout=dropout, num_out_classes=num_out_classes)
+
+    elif modelname == 'xception_concat':
+        return TransferModel(modelchoice='xception_concat', num_out_classes=num_out_classes)
+
+    else:
+        raise NotImplementedError(f"Model '{modelname}' is not supported.")
