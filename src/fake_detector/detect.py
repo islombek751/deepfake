@@ -81,11 +81,17 @@ def check_image_fake(image_bytes: bytes) -> dict:
             logits = outputs.logits if hasattr(outputs, 'logits') else outputs
             probabilities = torch.nn.functional.softmax(logits, dim=1)[0]
             predicted = torch.argmax(probabilities).item()
+            confidence = round(probabilities[predicted].item() * 100, 2)
 
+        label_map = {0: "fake", 1: "real"}
         return {
             "label": label_map[predicted],
-            "confidence": round(probabilities[predicted].item() * 100, 2)
+            "confidence": confidence
         }
+
+    except Exception as e:
+        return {"error": str(e)}
+
 
     except Exception as e:
         return {

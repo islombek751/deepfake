@@ -125,7 +125,7 @@ async def analyze_uploaded_video(file: UploadFile = File(...)):
 
         # Asosiy tekshiruvlar
         metadata_video = check_video_metadata(str(tmp_file_path))
-        ai_generated_check = analyze_video(video_path=str(tmp_file_path), use_cuda=True)
+        ai_generated_check = analyze_video(video_path=str(tmp_file_path))
         watermark_check = detect_watermark_in_video(video_path=str(tmp_file_path))
 
         # Monitoring: yakuni
