@@ -7,17 +7,8 @@
    git clone https://git.uzinfocom.uz/agrod/ministry-of-water-resources/media-checker/backend.git
    cd backend
 
-2. 🔽 Virtual environment yaratish (ixtiyoriy, tavsiya qilinadi):
-    ```bash
-    python -m venv venv
-    source venv/bin/activate    # Linux/Mac
-    .\venv\Scripts\activate  # windows
 
-3. 🔽 Kutubxonalarni o‘rnatish:
-    ```bash
-    pip install -r requirements.txt
-
-4. 🔽 Modellarni kerakli papklarga yuklab olish:
+2. 🔽 Modellarni kerakli papklarga yuklab olish:
     
     Watermark Detect funksiyasi ishlashi uchun quyidagi linkdagi modelni yuklab oling:
     
@@ -43,18 +34,31 @@
     Va src/deepfake_video_detector/models/ papkasiga ko'chirib o'tkazing.
 
 
-5. 🚀 Loyihani ishga tushirish
+3. 🚀 Loyihani ishga tushirish
     
     ```bash
-    uvicorn main:app --reload
+    #agar sizda GPU mavjud bolmasa
+
+    docker compose -f local.yml up --build media-checker-cpu
+
+
+    YOKI
+
+    #agar sizda GPU mavjud bolsa
+
+    docker compose -f local.yml up --build media-checker-gpu
 
 
     http://127.0.0.1:8000/docs
 
-6. 📁 Loyiha tuzilmasi
+4. 📁 Loyiha tuzilmasi
     ```bash
     .
-    ├── requirements.txt
+    ├── requirements
+    ├── compose
+        ├── Dockerfile.gpu    ← bu GPU mavjud bolsa ishlaydi.
+        └── Dockerfile.cpu
+    ├── local.yml
     ├── README.md
     ├── uploaded_images
     └── src/
@@ -68,5 +72,7 @@
             └── models/  ← bu yerga AI-generated modeli joylashtiriladi
 
 
-7. ✨ Eslatma
+5. ✨ Eslatma
 Model fayllari .gitignore orqali git’da kuzatilmaydi. Ularni alohida yuklab olish majburiy.
+media-checker-cpu — CPU bilan ishlaydigan servis (hamma kompyuterda ish beradi)
+media-checker-gpu — faqat NVIDIA GPU va nvidia-docker mavjud bo‘lsa ishlaydi
