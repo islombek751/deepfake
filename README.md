@@ -37,19 +37,20 @@
 3. 🚀 Loyihani ishga tushirish
     
     ```bash
-    #agar sizda GPU mavjud bolmasa
+    #agar sizda GPU mavjud bo'lmasa
 
     docker compose -f local.yml up --build media-checker-cpu
 
+    http://127.0.0.1:8000/docs
 
     YOKI
 
-    #agar sizda GPU mavjud bolsa
+    #agar sizda GPU mavjud bo'lsa
 
     docker compose -f local.yml up --build media-checker-gpu
 
 
-    http://127.0.0.1:8000/docs
+    http://127.0.0.1:8001/docs
 
 4. 📁 Loyiha tuzilmasi
     ```bash
@@ -60,7 +61,6 @@
         └── Dockerfile.cpu
     ├── local.yml
     ├── README.md
-    ├── uploaded_images
     └── src/
         ├── main.py    ← bu yerda API endpointlar yozilgan
         ├── analyze_metadata/
@@ -74,5 +74,7 @@
 
 5. ✨ Eslatma
 Model fayllari .gitignore orqali git’da kuzatilmaydi. Ularni alohida yuklab olish majburiy.
+
 media-checker-cpu — CPU bilan ishlaydigan servis (hamma kompyuterda ish beradi)
+
 media-checker-gpu — faqat NVIDIA GPU va nvidia-docker mavjud bo‘lsa ishlaydi
