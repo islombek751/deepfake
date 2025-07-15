@@ -2,12 +2,12 @@ FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Tizimga kerakli kutubxonalarni o‘rnatamiz
+# 1. Tizimga kerakli kutubxonalarni o‘rnatamiz
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     software-properties-common \
     build-essential \
-    cmake \ 
+    cmake \
     curl \
     ffmpeg \
     libgl1-mesa-glx \
@@ -20,15 +20,26 @@ RUN apt-get update && \
     ln -sf /usr/bin/pip3 /usr/bin/pip && \
     rm -rf /var/lib/apt/lists/*
 
+# 2. Ishchi katalog
 WORKDIR /app
+
+# 3. Torch kutubxonalarni alohida qatlamda o‘rnatamiz (Docker cache ishlaydi)
+RUN pip install --upgrade pip && \
+    pip install torch==2.2.2+cu118 torchvision==0.17.2+cu118 torchaudio==2.2.2+cu118 \
+        --index-url https://download.pytorch.org/whl/cu118
+
+# 4. requirements fayllarni alohida COPY qilamiz
 COPY requirements/ ./requirements/
 
-RUN pip install torch==2.2.2+cu118 torchvision==0.17.2+cu118 torchaudio==2.2.2+cu118 \
-        --index-url https://download.pytorch.org/whl/cu118 && \
-    pip install -r requirements/requirements.gpu.txt
+# 5. Qolgan kutubxonalarni o‘rnatamiz
+RUN pip install --no-cache-dir -r requirements/requirements.gpu.txt
 
+# 6. Kodni copy qilamiz (eng oxirida, shunda code o‘zgarsa faqat bu qatlam yangilanadi)
 COPY . .
 
+# 7. Port ochamiz
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# 8. App’ni ishga tushuramiz
+CMD alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
