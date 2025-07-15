@@ -3,23 +3,55 @@ import shutil
 import tempfile
 import uuid
 import pynvml
-from fastapi import FastAPI, UploadFile, File
+from fastapi import Depends, FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-from datetime import datetime
-import os
+from fastapi.openapi.utils import get_openapi
 import time
 import psutil
 
 from src.analyze_metadata.analyze import check_video_metadata
+from src.app.dependencies.auth import get_current_user
 from src.deepfake_video_detector.detect_from_video import analyze_video
 from src.watermark_detector.watermark_detector import detect_watermark, detect_watermark_in_video
 from .fake_detector.detect import check_image_fake
-
+from src.app.routes import auth
 
 app = FastAPI()
 
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="Support Chat API",
+        version="1.0.0",
+        description="API for admin/operator/widget with JWT",
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT"
+        }
+    }
+    for path in openapi_schema["paths"]:
+        for method in openapi_schema["paths"][path]:
+            if not path.startswith("/widget"):
+                openapi_schema["paths"][path][method]["security"] = [{"BearerAuth": []}]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
+
+
 @app.post("/check-image/")
-async def check_image(file: UploadFile = File(...)):
+async def check_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """
     AI tomonidan yaratilgan rasm (fake) yoki yo‘qligini va watermark mavjudligini tekshiradi.
 
@@ -89,7 +121,7 @@ def get_gpu_info():
 
 
 @app.post("/check-video/")
-async def analyze_uploaded_video(file: UploadFile = File(...)):
+async def analyze_uploaded_video(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """
     Video faylni quyidagi jihatlar bo‘yicha tekshiradi:
     - AI generated video (deepfake) aniqlovchi model orqali
