@@ -78,3 +78,18 @@ Model fayllari .gitignore orqali git’da kuzatilmaydi. Ularni alohida yuklab ol
 media-checker-cpu — CPU bilan ishlaydigan servis (hamma kompyuterda ish beradi)
 
 media-checker-gpu — faqat NVIDIA GPU va nvidia-docker mavjud bo‘lsa ishlaydi
+
+
+6. Server uchun minimal va tavsiya qilingan harakteristika:
+
+    | Resurs             | Minimal      | Tavsiya (GPU bo‘lsa)             |
+    | ------------------ | ------------ | -------------------------------- |
+    | CPU                | 4 cores      | 8 cores                          |
+    | GPU                | ❌ yo‘q       | ✅ NVIDIA RTX 3060 yoki Tesla T4  |
+    | CUDA               | ❌ kerak emas | ✅ CUDA 12.1                      |
+    | RAM                | 8 GB         | 16 GB+                           |
+    | Disk               | 10 GB SSD    | 20 GB SSD (model fayllari uchun) |
+    | OS                 | Ubuntu 22.04 | Ubuntu 22.04                     |
+    | Python             | 3.10         | 3.10                             |
+    | PostgreSQL         | 14+          | 14+                              |
+    | Gunicorn + Uvicorn | ishlatiladi  | ishlatiladi                      |
