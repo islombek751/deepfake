@@ -1,5 +1,21 @@
 # 🚀 FastAPI Project
 
+# ⚙️ Server uchun minimal va tavsiya qilingan harakteristika:
+
+    | Resurs             | Minimal      | Tavsiya (GPU bo‘lsa)             |
+    | ------------------ | ------------ | -------------------------------- |
+    | CPU                | 4 cores      | 8 cores                          |
+    | GPU                | ❌ yo‘q       | ✅ NVIDIA RTX 3060 yoki Tesla T4  |
+    | CUDA               | ❌ kerak emas | ✅ CUDA 12.1                      |
+    | RAM                | 8 GB         | 16 GB+                           |
+    | Disk               | 10 GB SSD    | 20 GB SSD (model fayllari uchun) |
+    | OS                 | Ubuntu 22.04 | Ubuntu 22.04                     |
+    | Python             | 3.10         | 3.10                             |
+    | PostgreSQL         | 14+          | 14+                              |
+    | Gunicorn + Uvicorn | ishlatiladi  | ishlatiladi                      |
+
+
+
 ## ⚙️ O‘rnatish
 
 1. 🔽 Repository’ni klonlash:
@@ -54,22 +70,70 @@
 
 4. 📁 Loyiha tuzilmasi
     ```bash
-    .
-    ├── requirements
-    ├── compose
-        ├── Dockerfile.gpu    ← bu GPU mavjud bolsa ishlaydi.
-        └── Dockerfile.cpu
-    ├── local.yml
-    ├── README.md
-    └── src/
-        ├── main.py    ← bu yerda API endpointlar yozilgan
-        ├── analyze_metadata/
-        ├── deepfake_video_detector/
-        │   └── models/  ← bu yerga Deepfake video modeli joylashtiriladi
-        ├── watermark_detector/
-        │   └── models/  ← bu yerga Watermark modeli joylashtiriladi
-        └── fake_detector/
-            └── models/  ← bu yerga AI-generated modeli joylashtiriladi
+        ├── .env                         # Muhit o'zgaruvchilari
+        ├── alembic.ini                  # Alembic sozlamalari
+        ├── local.yml                    # Docker Compose config
+        ├── README.md
+        │
+        ├── alembic/                     # Alembic migratsiya fayllari
+        │   ├── versions/                # Har bir migratsiya fayli shu yerda
+        │   ├── env.py                   # Alembic konfiguratsiyasi
+        │
+        ├── compose/                     # Dockerfile.lar
+        │   ├── Dockerfile.cpu
+        │   └── Dockerfile.gpu
+        │
+        ├── requirements/               # Turli muhitlar uchun talablar
+        │   ├── base.txt
+        │   ├── requirements.cpu.txt
+        │   └── requirements.gpu.txt
+        │
+        ├── src/
+        │   ├── main.py                  # FastAPI kirish nuqtasi
+        │   ├── config.py                # .env faylni o‘qish
+        │   ├── __init__.py
+        │   │
+        │   ├── app/                     # Asosiy backend logika
+        │   │   ├── deps.py              # General depends
+        │   │   ├── core/                # Auth + JWT funksiyalari
+        │   │   │   ├── jwt.py
+        │   │   │   └── security.py
+        │   │   ├── db/                  # SQLAlchemy bazaviy sozlamalar
+        │   │   │   ├── base.py
+        │   │   │   └── session.py
+        │   │   ├── dependencies/        # FastAPI depends (auth uchun)
+        │   │   │   └── auth.py
+        │   │   ├── models/              # SQLAlchemy ORM modellar
+        │   │   │   └── user.py
+        │   │   ├── schemas/             # Pydantic sxemalar
+        │   │   │   └── user.py
+        │   │   └── routes/              # API endpointlar
+        │   │       └── auth.py
+        │
+        │   ├── analyze_metadata/        # Video metadatasini tahlil qilish
+        │   │   └── analyze.py
+        │
+        │   ├── deepfake_video_detector/ # Deepfake video aniqlash
+        │   │   ├── models/              # PyTorch model fayli (.pth)
+        │   │   ├── detect_from_video.py
+        │   │   ├── models.py
+        │   │   ├── transform.py
+        │   │   └── xception.py
+        │
+        │   ├── fake_detector/           # Rasm bo‘yicha AI aniqlovchi modul
+        │   │   ├── models/
+        │   │   │   └── model_epoch_24.pth
+        │   │   ├── detect.py
+        │   │   ├── model.py
+        │   │   └── custom_dataset.py
+        │
+        │   └── watermark_detector/      # Watermark tekshiruvchi modul
+        │       ├── models/
+        │       │   └── convnext-tiny_watermarks_detector.pth
+        │       ├── predictor.py
+        │       ├── utils.py
+        │       └── watermark_detector.py
+
 
 
 5. ✨ Eslatma
@@ -78,18 +142,3 @@ Model fayllari .gitignore orqali git’da kuzatilmaydi. Ularni alohida yuklab ol
 media-checker-cpu — CPU bilan ishlaydigan servis (hamma kompyuterda ish beradi)
 
 media-checker-gpu — faqat NVIDIA GPU va nvidia-docker mavjud bo‘lsa ishlaydi
-
-
-6. Server uchun minimal va tavsiya qilingan harakteristika:
-
-    | Resurs             | Minimal      | Tavsiya (GPU bo‘lsa)             |
-    | ------------------ | ------------ | -------------------------------- |
-    | CPU                | 4 cores      | 8 cores                          |
-    | GPU                | ❌ yo‘q       | ✅ NVIDIA RTX 3060 yoki Tesla T4  |
-    | CUDA               | ❌ kerak emas | ✅ CUDA 12.1                      |
-    | RAM                | 8 GB         | 16 GB+                           |
-    | Disk               | 10 GB SSD    | 20 GB SSD (model fayllari uchun) |
-    | OS                 | Ubuntu 22.04 | Ubuntu 22.04                     |
-    | Python             | 3.10         | 3.10                             |
-    | PostgreSQL         | 14+          | 14+                              |
-    | Gunicorn + Uvicorn | ishlatiladi  | ishlatiladi                      |
