@@ -8,7 +8,7 @@ import io
 # Model va processor ni yuklash
 model_name = "prithivMLmods/deepfake-detector-model-v1"  
 model = SiglipForImageClassification.from_pretrained(model_name)
-processor = AutoImageProcessor.from_pretrained(model_name)
+processor = AutoImageProcessor.from_pretrained(model_name, use_fast=True)
 
 # Label mapping
 id2label = {
