@@ -13,18 +13,17 @@ safetensors==0.5.3
 timm==1.0.15
 tokenizers==0.21.1
 
-# PyTorch (CPU-only uchun)
-torch==2.5.1+cpu
-torchvision==0.20.1+cpu
-torchaudio==2.5.1+cpu
--f https://download.pytorch.org/whl/cpu/torch_stable.html
+# PyTorch (CPU uchun)
+# torch==2.5.1
+# torchvision==0.20.1
+# torchaudio==2.5.1
 
 # Video / Image processing
 opencv-python==4.11.0.86
 pillow==11.2.1
 numpy<2.0.0
 
-# Database & Auth
+# Database & Auth (agar ishlatsang)
 sqlalchemy
 alembic
 psycopg2-binary
@@ -33,3 +32,7 @@ python-dotenv
 python-jose
 pydantic-settings
 ffmpeg-python
+
+# JWT uchun
+python-jose
+passlib[bcrypt]
