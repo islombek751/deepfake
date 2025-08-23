@@ -1,8 +1,6 @@
 from pathlib import Path
 import shutil
 import tempfile
-import uuid
-import pynvml
 from fastapi import Depends, FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
@@ -12,7 +10,6 @@ import psutil
 from src.analyze_metadata.analyze import check_video_metadata
 from src.app.dependencies.auth import get_current_user
 from src.deepfake_video_detector.detect_from_video import analyze_video
-from src.watermark_detector.watermark_detector import detect_watermark, detect_watermark_in_video
 from .fake_detector.detect import check_image_fake
 from src.app.routes import auth
 
@@ -76,19 +73,12 @@ async def check_image(file: UploadFile = File(...), user: dict = Depends(get_cur
     # AI generated checker — faylsiz ishlaydi
     ai_result = check_image_fake(content)
 
-    # Faylni vaqtincha saqlab, watermark checker uchun kerak
-    with tempfile.NamedTemporaryFile(suffix=Path(file.filename).suffix, delete=True) as tmp:
-        tmp.write(content)
-        tmp.flush()
-        watermark_result = detect_watermark(tmp.name)
-
     duration = time.time() - start_time
     mem_after = process.memory_info().rss / 1024 / 1024  # MB
     cpu_percent = process.cpu_percent(interval=0.1)
 
     return {
         "ai_generated_checker": ai_result,
-        "watermark_result": watermark_result,
         "metrics": {
             "duration_seconds": round(duration, 3),
             "memory_used_MB": round(mem_after - mem_before, 2),
@@ -96,28 +86,6 @@ async def check_image(file: UploadFile = File(...), user: dict = Depends(get_cur
         }
     }
 
-
-
-def get_gpu_info():
-    """
-    GPU haqida ma’lumotni qaytaradi (agar mavjud bo‘lsa).
-
-    Returns:
-        dict: GPU nomi, foydalanilayotgan xotira, umumiy xotira, utilization foizi
-    """
-    try:
-        pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
-        return {
-            "gpu_name": pynvml.nvmlDeviceGetName(handle).decode(),
-            "gpu_memory_used_mb": round(memory.used / 1024 / 1024, 2),
-            "gpu_memory_total_mb": round(memory.total / 1024 / 1024, 2),
-            "gpu_utilization_percent": utilization.gpu
-        }
-    except Exception as e:
-        return {"gpu": "not available", "error": str(e)}
 
 
 @app.post("/check-video/")
@@ -153,22 +121,18 @@ async def analyze_uploaded_video(file: UploadFile = File(...), user: dict = Depe
         start_time = time.time()
         cpu_start = process.cpu_times()
         mem_start = process.memory_info().rss
-        gpu_before = get_gpu_info()
 
         # Asosiy tekshiruvlar
         metadata_video = check_video_metadata(str(tmp_file_path))
         ai_generated_check = analyze_video(video_path=str(tmp_file_path))
-        watermark_check = detect_watermark_in_video(video_path=str(tmp_file_path))
 
         # Monitoring: yakuni
         elapsed_time = time.time() - start_time
         cpu_end = process.cpu_times()
         mem_end = process.memory_info().rss
-        gpu_after = get_gpu_info()
 
         result = {
             "ai_generated_checker": ai_generated_check,
-            "watermark_checker": watermark_check,
             "metadata_checker": metadata_video,
             "resource_usage": {
                 "cpu_user_time_sec": round(cpu_end.user - cpu_start.user, 3),
@@ -176,8 +140,6 @@ async def analyze_uploaded_video(file: UploadFile = File(...), user: dict = Depe
                 "ram_usage_start_mb": round(mem_start / 1024 / 1024, 2),
                 "ram_usage_end_mb": round(mem_end / 1024 / 1024, 2),
                 "duration_sec": round(elapsed_time, 2),
-                "gpu_before": gpu_before,
-                "gpu_after": gpu_after
             }
         }
 
