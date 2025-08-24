@@ -75,4 +75,11 @@ def check_video_metadata(video_path):
     if not analysis["encoded_date_found"]:
         analysis["warnings"].append("Encoded or creation date missing.")
 
+     # --- SUMMARY Qo‘shish ---
+    if analysis["suspicious_encoder"] or "missing" in " ".join(analysis["warnings"]).lower():
+        summary = "Video may have been edited or metadata stripped."
+    else:
+        summary = "Video appears authentic based on metadata."
+
+    analysis["summary"] = summary
     return analysis
